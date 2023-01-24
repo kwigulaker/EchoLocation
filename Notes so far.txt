@@ -1,0 +1,27 @@
+EM2040 dataset:
+3 PCDs with identifiable objects so far, mostly moorings.
+3 with unknown object classes, but clear objects
+5 with no discernable object instances, or rough data.
+
+EM2040 dataset from Summer coming next week.
+
+Graph vs Euclidean representation for detection looking into.
+
+Graph representation of PCDs:
+Delaunay triangulation seems a simple and viable method, although somewhat computationally complex.
+
+Graph operations --> Cluster into subgraphs --> classify subgraphs entirely
+
+Clustering algorithms:
+K-Means, or Bisected K-Means --> Extremely high performance, able to somewhat differentiate mooring chains from seafloor 
+(but links them all to the same cluster).
+
+DBSCAN/Birch work but havent under any tests been able to differentiate objects above seafloor level.
+
+Graph-based methods, Affinity Propagation, Spectral clustering, and others are not scalable enough to work with large datasets,
+would have to chunk pointclouds to an extreme level to be viable. Mostly due to the neighbour matrix metric used that had a quadratic
+memory growth based on data size, 1000 points leads to 1000^2 dataframe for example.
+
+RANSAC for linear approximation of seabed plane --> remove inliers --> profit.
+
+CURE Algorithm:
