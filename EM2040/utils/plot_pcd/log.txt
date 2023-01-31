@@ -1,1 +1,10 @@
-An exceptional thing happed - 'numpy.ndarray' object has no attribute 'remove'
+An exceptional thing happed - select_by_index(): incompatible function arguments. The following argument types are supported:
+    1. (self: open3d.cpu.pybind.geometry.PointCloud, indices: List[int], invert: bool = False) -> open3d.cpu.pybind.geometry.PointCloud
+
+Invoked with: PointCloud with 1165824 points., array([[ 583303, 6588478,      -4],
+       [ 583303, 6588477,      -5],
+       [ 583304, 6588478,      -4],
+       ...,
+       [ 583317, 6588485,      -4],
+       [ 583313, 6588481,      -4],
+       [ 583324, 6588479,      -5]])

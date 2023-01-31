@@ -54,51 +54,35 @@ def plot_pcd_clusters(filename,clusters,centroids):
     mlab.show()
     sys.exit()
 
-def plot_pcd_seabed(filename,inliers):
-    pcd = o3d.io.read_point_cloud(filename)
-    x = np.array(pcd.points)[:, 0]  # x position of point
-    y = np.array(pcd.points)[:, 1]  # y position of point
-    z = np.array(pcd.points)[:, 2]  # z position of point
+def plot_pcd_seabed(outliers,seabed):
+    outliers = np.loadtxt(outliers)
+    x = np.array(outliers)[:, 0]  # x position of point
+    y = np.array(outliers)[:, 1]  # y position of point
+    z = np.array(outliers)[:, 2]  # z position of point
     fig = mlab.figure(bgcolor=(0, 0, 0), size=(1920, 1080))
-
-    # Colour correcting based on height
-    #mlab.points3d(x,y,z,z,          # Values used for Color
-    #                    mode="point",
-    #                    colormap='gnuplot', # 'bone', 'copper', 'gnuplot'
-    #                    color=(1,0,0),
-    #                    figure=fig,
-    #                    )
-
     # Plotting seabed plane
     print("Plotting PCD plus seabed...")
-    try:
-        inliers = np.loadtxt(inliers).astype(int)
-        seabed = pcd.select_by_index(inliers)
-        x_sb = np.array(seabed.points)[:, 0]  # x position of point
-        y_sb = np.array(seabed.points)[:, 1]  # y position of point
-        z_sb = np.array(seabed.points)[:, 2]  # z position of point
-        #Plotting without seabed.
-        mlab.points3d(x,y,z,z,          # Values used for Color
-                            mode="point",
-                            color=(0,0,1),
-                            figure=fig,
-                            )
-        #Plotting seabed.
-        mlab.points3d(x_sb,y_sb,z_sb,z_sb,          # Values used for Color
-                            mode="point",
-                            color=(1,0,0),
-                            figure=fig,
-                            )
-    except Exception as e:
-            f = open('log.txt', 'w')
-            f.write('An exceptional thing happed - %s' % e)
-            f.close()
+    seabed = np.loadtxt(seabed)
+    #seabed = pcd.select_by_index(inliers)
+    x_sb = np.array(seabed)[:, 0]  # x position of point
+    y_sb = np.array(seabed)[:, 1]  # y position of point
+    z_sb = np.array(seabed)[:, 2]  # z position of point
+    #Plotting without seabed.
+    mlab.points3d(x,y,z,z,          # Values used for Color
+                        mode="point",
+                        color=(0,0,1),
+                        figure=fig,
+                        )
+    #Plotting seabed.
+    mlab.points3d(x_sb,y_sb,z_sb,z_sb,          # Values used for Color
+                        mode="point",
+                        color=(1,0,0),
+                        figure=fig,
+                        )
     mlab.show()
     sys.exit()
 
-
-#plot_pcd_seabed("../../data/xyz/identifiable_objects/0002_20210607_130418.utm.xyz.xyz","../../data/seabed/0002_20210607_130418_inliers.txt") 2 moorings small
-
-plot_pcd_seabed("../../data/xyz/unknown_objects/0016_20210607_135027.utm.xyz.xyz","../../data/seabed/0016_20210607_135027_inliers.txt")
+#plot_pcd("../../data/xyz/identifiable_objects/0001_20210607_130222.utm.xyz.xyz")
+plot_pcd_seabed("../../data/seabed/0001_20210607_130222_outliers.txt","../../data/seabed/0001_20210607_130222_inliers.txt")
 
 
