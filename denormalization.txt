@@ -1,0 +1,9 @@
+x_norm = (x_max_def - x_min_def)/((x_max_obs - x_min_obs)*(x - x_min_obs)) + x_min_def
+
+x_norm - x_min_def = (x_max_def - x_min_def)/(x_max_obs - x_min_obs)*(x - x_min_obs)
+
+(x_norm - x_min_def)/(x_max_def - x_min_def) = (x - x_min_obs)/(x_max_obs - x_min_obs)
+
+((x_norm - x_min_def)*(x_max_obs - x_min_obs))/(x_max_def - x_min_def) = x - x_min_obs
+
+x = ((x_norm - x_min_def)*(x_max_obs - x_min_obs))/(x_max_def - x_min_def) + x_min_obs
