@@ -97,10 +97,11 @@ def getConnectedComponents(pcd):
 
 if __name__ == "__main__":
     test_pcd = PCD("../EM2040/data/xyz/identifiable_objects/0001_20210607_130222.utm.xyz.xyz")
-    test_pcd.find_seabed_ransac(3) # Seabed filtering
+    test_pcd.find_seabed_ransac() # Seabed filtering
     test_pcd.generateGraphNN() # Graph representation
     getConnectedComponents(test_pcd) # Clustering
     test_pcd.plot2D(False,True) # Plotting
-    np.savetxt("../EM2040/data/seabed/0001_20210607_130222_inliers.txt",test_pcd.seabed)
-    np.savetxt("../EM2040/data/seabed/0001_20210607_130222_outliers.txt",test_pcd.outliers)
-    np.savetxt("../EM2040/data/clusters/0001_20210607_130222_labels.txt",test_pcd.clusters)
+    np.savetxt("../EM2040/data/seabed/0001_20210607_130222_inliers.txt",test_pcd.seabed) # Save seabed inliers
+    np.savetxt("../EM2040/data/seabed/0001_20210607_130222_outliers.txt",test_pcd.outliers) # Save seabed outliers (objects not clustered)
+    #np.savetxt("../EM2040/data/clusters/0009_20220802_110307_labels.txt",test_pcd.clusters) # Save clustering labels (array of IDs)
+    test_pcd.writeToClusters("../EM2040/data/clusters/0001_20210607_130222") # Save outliers as multiple clustered pointclouds
