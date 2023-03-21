@@ -4,6 +4,8 @@ from mayavi import mlab
 from pyntcloud import PyntCloud
 from collections import Counter
 
+
+# This should be completely rewritten to use CloudCompare instead of Mayavi due to size limitations and unreliability.
 def plot_pcd(filename):
     pcd = o3d.io.read_point_cloud(filename)
     x = np.array(pcd.points)[:, 0]  # x position of point

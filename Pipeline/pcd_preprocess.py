@@ -9,6 +9,7 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import networkx as nx
+import pyproj as pyproj
 
 ## Class containing a pointcloud, including all necessary preprocessing functions and representations
 class PCD:
@@ -23,8 +24,9 @@ class PCD:
     def __init__(self, filename):
         pcd = o3d.io.read_point_cloud(filename) # Pointcloud read from .xyz file
         self.outliers = np.asarray(pcd.points)
+            
     
-    def find_seabed_ransac(self):
+    def find_seabed_ransac(self,remove_neg):
         # What if this just runs indefinitely, until seabeds with less than say 5000 points arent found?
         num_failures = 0
         i = 0
@@ -33,12 +35,12 @@ class PCD:
             seabed = pyrsc.Plane()
             points_np = self.outliers
             print("Current amount of outliers: " + str(points_np.shape))
-            best_eq, best_inliers,seabed_corners = seabed.fit((self.outliers),0.15,maxIteration=10000)
+            best_eq, best_inliers,seabed_corners = seabed.fit((self.outliers),0.15,maxIteration=3000)
             self.equation = best_eq
             self.seabed_corners = seabed_corners
             seabed_points = []
             # This should be a dynamic variable and not hardcoded
-            if np.array(best_inliers).shape[0] < 7500:
+            if np.array(best_inliers).shape[0] < 6000:
                 num_failures += 1
                 print("Failed to find appropriate seabed approximation.")
                 continue
@@ -49,10 +51,10 @@ class PCD:
             else:
                 self.seabed = np.append(self.seabed,np.array(seabed_points),axis=0)
             print("Total points in seabed: " + str(self.seabed.shape))
-            self.filter_seabed()
+            self.filter_seabed(remove_neg)
             i+=1
     
-    def filter_seabed(self):
+    def filter_seabed(self,remove_neg):
         # This step can become computationally complex when other methods are used, so far this is the quickest filtering method I could find
         orig_pcd = self.outliers # Get original pointcloud
         seabed_inliers = self.seabed # Get seabed pointcloud
@@ -74,42 +76,44 @@ class PCD:
         # Decompose vector into three parts, check sign of z-part, if negative, point is over seabed, if positive --> add point to seabed inliers.
 
         # This is longwinded as hell right now, no doubt it can be simplified
-        new_seabed_points = []
-        for point in self.outliers:
-            x,y = point[0],point[1]
-            # First check if point (x,y) lies on the horizontal area defined by the seabed plane.
-            pointM = np.array([x,y])
-            pointA = np.array([self.seabed_corners[0][0],self.seabed_corners[0][1]])
-            pointB = np.array([self.seabed_corners[1][0],self.seabed_corners[1][1]])
-            pointC = np.array([self.seabed_corners[2][0],self.seabed_corners[2][1]])
-            # https://stackoverflow.com/questions/2752725/finding-whether-a-point-lies-inside-a-rectangle-or-not
-            vectorAB = pointB-pointA
-            vectorAM = pointM-pointA
-            vectorBC = pointC-pointB
-            vectorBM = pointM-pointB
-            # 0 <= dot(AB,AM) <= dot(AB,AB) && 0 <= dot(BC,BM) <= dot(BC,BC)
-            if (np.dot(vectorAB,vectorAM) >= 0 and np.dot(vectorAB,vectorAB) >= np.dot(vectorAB,vectorAM)) and (np.dot(vectorBC,vectorBM) >= 0 and np.dot(vectorBC,vectorBC) >= np.dot(vectorBC,vectorBM)):
-                # Point lies in rectangle
-                # Check height difference between nearest 
-                perp_point = self.getPointPerpendicular(point,self.equation)
-                diff_vec = point - perp_point
-                if(diff_vec[2] < 0):
-                    # Do as above with filtering out seabed, make two sets
-                    new_seabed_points.append(point)
-        
-        # Add new points to seabed
-        if(len(new_seabed_points) > 0):
-            self.seabed = np.append(self.seabed,np.array(new_seabed_points),axis=0)
+        if(remove_neg):
+            new_seabed_points = []
+            for point in processed_pcd:
+                x,y = point[0],point[1]
+                # First check if point (x,y) lies on the horizontal area defined by the seabed plane.
+                pointM = np.array([x,y])
+                pointA = np.array([self.seabed_corners[0][0],self.seabed_corners[0][1]])
+                pointB = np.array([self.seabed_corners[1][0],self.seabed_corners[1][1]])
+                pointC = np.array([self.seabed_corners[2][0],self.seabed_corners[2][1]])
+                # https://stackoverflow.com/questions/2752725/finding-whether-a-point-lies-inside-a-rectangle-or-not
+                vectorAB = pointB-pointA
+                vectorAM = pointM-pointA
+                vectorBC = pointC-pointB
+                vectorBM = pointM-pointB
+                # 0 <= dot(AB,AM) <= dot(AB,AB) && 0 <= dot(BC,BM) <= dot(BC,BC)
+                if (np.dot(vectorAB,vectorAM) >= 0 and np.dot(vectorAB,vectorAB) >= np.dot(vectorAB,vectorAM)) and (np.dot(vectorBC,vectorBM) >= 0 and np.dot(vectorBC,vectorBC) >= np.dot(vectorBC,vectorBM)):
+                    # Point lies in rectangle
+                    # Check height difference, we say upwards is the z-axes
+                    vec_up = np.array([0,0,1])
+                    perp_point = self.getPointPerpendicular(point,self.equation)
+                    diff_vec = point - perp_point
+                    if(np.dot(vec_up,diff_vec) < 0):
+                        # Do as above with filtering out seabed, make two sets
+                        new_seabed_points.append(point)
+            
+            # Add new points to seabed
+            if(len(new_seabed_points) > 0):
+                self.seabed = np.append(self.seabed,np.array(new_seabed_points),axis=0)
 
-            # Convert point clouds to sets
-            cloud1_set = set(map(tuple, processed_pcd))
-            cloud2_set = set(map(tuple, new_seabed_points))
+                # Convert point clouds to sets
+                cloud1_set = set(map(tuple, processed_pcd))
+                cloud2_set = set(map(tuple, new_seabed_points))
 
-            # Find common points
-            common_points = cloud1_set.intersection(cloud2_set)
+                # Find common points
+                common_points = cloud1_set.intersection(cloud2_set)
 
-            # Remove common points (i.e seabed)
-            processed_pcd = np.array([point for point in cloud1_set if point not in common_points])
+                # Remove common points (i.e seabed)
+                processed_pcd = np.array([point for point in cloud1_set if point not in common_points])
 
         self.outliers = processed_pcd
     
@@ -218,6 +222,7 @@ class PCD:
         self.graph_outliers.add_nodes_from(node_dict)
         tree = KDTree(points, leaf_size=2)
         if n_neighbors is None:
+            #all_nn_indices = tree.query_radius(points, r=0.5)  # NNs within distance r of point
             all_nn_indices = tree.query_radius(points, r=0.5)  # NNs within distance r of point
             ind = 0
             for point in all_nn_indices:
@@ -278,17 +283,24 @@ class PCD:
         # location: directory/name to write clusters to
         subgraphs = [self.graph_outliers.subgraph(c).copy() for c in nx.connected_components(self.graph_outliers)] # Note, these are arrays of indices not actual points
         ind_sub = 0
+        noise = []
         for sub in subgraphs:
             curr_indice = 0
             indices = sub.nodes
-            # Currently only write clusters larger than 200 points, however what should occur is clusters smaller than 200 points get lumped together into 'noise'
-            # 200 is an arbitrary size
+            points = np.zeros(shape=(len(indices),3))
+            # Currently only write individual clusters larger than 100 points, clusters smaller than 100 points get lumped together into 'noise' cluster
+            # 100 is an arbitrary size
             if(len(indices) > 100):
-                points = np.zeros(shape=(len(indices),3))
                 for indice in indices:
                     points[curr_indice] = [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]]
                     curr_indice += 1
                 np.savetxt(location + "_" + str(ind_sub) + ".txt",points)
+
+            else:
+                for indice in indices:
+                    noise.append( [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]])
             ind_sub+=1
+        np.savetxt(location + "_noise.txt",noise)
+
 
 
