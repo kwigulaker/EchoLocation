@@ -24,25 +24,25 @@ class PCD:
     def __init__(self, filename):
         pcd = o3d.io.read_point_cloud(filename) # Pointcloud read from .xyz file
         self.outliers = np.asarray(pcd.points)
-            
+        self.graph_outliers = None
     
     def find_seabed_ransac(self,remove_neg):
         # What if this just runs indefinitely, until seabeds with less than say 5000 points arent found?
         num_failures = 0
         i = 0
+        inlier_threshold = 0.15
         while num_failures < 3:
             print("Iteration: " + str(i+1))
             seabed = pyrsc.Plane()
             points_np = self.outliers
             print("Current amount of outliers: " + str(points_np.shape))
-            best_eq, best_inliers,seabed_corners = seabed.fit((self.outliers),0.15,maxIteration=3000)
+            best_eq, best_inliers,seabed_corners = seabed.fit((self.outliers),inlier_threshold,maxIteration=5000)
             self.equation = best_eq
             self.seabed_corners = seabed_corners
             seabed_points = []
             # This should be a dynamic variable and not hardcoded
-            if np.array(best_inliers).shape[0] < 6000:
+            if np.array(best_inliers).shape[0] < 8500:
                 num_failures += 1
-                print("Failed to find appropriate seabed approximation.")
                 continue
             for index in best_inliers:
                 seabed_points.append(points_np[index])
@@ -212,7 +212,6 @@ class PCD:
             
         print("Number of vertices: " + str(len(self.graph_outliers)))
         print("Number of edges generated: " + str(np.array(self.graph_outliers.edges).shape))
-        self.plot2D()
 
     def generateGraphNN(self,n_neighbors=None):
         print("Generating graph with Nearest Neighbours approach...")
@@ -240,8 +239,6 @@ class PCD:
                     for neighbour in point:
                         self.graph_outliers.add_edge(ind,neighbour)
                     ind += 1
-                
-
         print("Number of vertices: " + str(len(self.graph_outliers)))
         print("Number of edges generated: " + str(np.array(self.graph_outliers.edges).shape))
 
@@ -281,26 +278,50 @@ class PCD:
     ## Write pointcloud as multiple individual pointclouds representing each cluster
     def writeToClusters(self,location):
         # location: directory/name to write clusters to
-        subgraphs = [self.graph_outliers.subgraph(c).copy() for c in nx.connected_components(self.graph_outliers)] # Note, these are arrays of indices not actual points
-        ind_sub = 0
-        noise = []
-        for sub in subgraphs:
-            curr_indice = 0
-            indices = sub.nodes
-            points = np.zeros(shape=(len(indices),3))
-            # Currently only write individual clusters larger than 100 points, clusters smaller than 100 points get lumped together into 'noise' cluster
-            # 100 is an arbitrary size
-            if(len(indices) > 100):
-                for indice in indices:
-                    points[curr_indice] = [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]]
-                    curr_indice += 1
-                np.savetxt(location + "_" + str(ind_sub) + ".txt",points)
+        if self.graph_outliers is None:
+            # Clusters generated through non-graph representation.
+            cluster_ids = np.unique(self.clusters,return_counts=True)
+            print("Number of clusters:" + str(len(cluster_ids[0])))
+            print("Points per cluster: " + str(cluster_ids[1]))
+            subgraphs = [[] for x in range(len(cluster_ids[0]))]
+            point_index = 0
+            for cluster_id in self.clusters:
+                point = self.outliers[point_index]
+                subgraphs[cluster_id].append(point)
+                point_index+=1
+            noise = []
+            indice = 0
+            for sub in subgraphs:
+                print(np.array(sub).shape)
+                if(len(sub) > 60):
+                    np.savetxt(location + "_" + str(indice) + ".txt",sub)
+                else:
+                    for point in sub:
+                        noise.append(point)
+                indice += 1
+            np.savetxt(location + "_noise.txt",noise)
 
-            else:
-                for indice in indices:
-                    noise.append( [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]])
-            ind_sub+=1
-        np.savetxt(location + "_noise.txt",noise)
+        else:
+            subgraphs = [self.graph_outliers.subgraph(c).copy() for c in nx.connected_components(self.graph_outliers)] # Note, these are arrays of indices not actual points
+            ind_sub = 0
+            noise = []
+            for sub in subgraphs:
+                curr_indice = 0
+                indices = sub.nodes
+                points = np.zeros(shape=(len(indices),3))
+                # Currently only write individual clusters larger than 100 points, clusters smaller than 100 points get lumped together into 'noise' cluster
+                # 100 is an arbitrary size
+                if(len(indices) > 60):
+                    for indice in indices:
+                        points[curr_indice] = [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]]
+                        curr_indice += 1
+                    np.savetxt(location + "_" + str(ind_sub) + ".txt",points)
+
+                else:
+                    for indice in indices:
+                        noise.append( [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]])
+                ind_sub+=1
+            np.savetxt(location + "_noise.txt",noise)
 
 
 
