@@ -22,8 +22,7 @@ class PCD:
     # clusters --> labels for each point as to which cluster/object they belong.
 
     def __init__(self, filename):
-        pcd = o3d.io.read_point_cloud(filename) # Pointcloud read from .xyz files
-        self.pcd = pcd
+        pcd = o3d.io.read_point_cloud(filename) # Pointcloud read from .xyz file
         self.outliers = np.asarray(pcd.points)
         self.graph_outliers = None
     
@@ -31,7 +30,7 @@ class PCD:
         # What if this just runs indefinitely, until seabeds with less than say 5000 points arent found?
         num_failures = 0
         i = 0
-        inlier_threshold = 0.15
+        inlier_threshold = 0.2
         while num_failures < 3:
             print("Iteration: " + str(i+1))
             seabed = pyrsc.Plane()
@@ -42,7 +41,7 @@ class PCD:
             self.seabed_corners = seabed_corners
             seabed_points = []
             # This should be a dynamic variable and not hardcoded
-            if np.array(best_inliers).shape[0] < 8500:
+            if np.array(best_inliers).shape[0] < 7000:
                 num_failures += 1
                 continue
             for index in best_inliers:
@@ -80,19 +79,12 @@ class PCD:
         if(remove_neg):
             new_seabed_points = []
             for point in processed_pcd:
-                x,y = point[0],point[1]
                 # First check if point (x,y) lies on the horizontal area defined by the seabed plane.
-                pointM = np.array([x,y])
-                pointA = np.array([self.seabed_corners[0][0],self.seabed_corners[0][1]])
-                pointB = np.array([self.seabed_corners[1][0],self.seabed_corners[1][1]])
-                pointC = np.array([self.seabed_corners[2][0],self.seabed_corners[2][1]])
-                # https://stackoverflow.com/questions/2752725/finding-whether-a-point-lies-inside-a-rectangle-or-not
-                vectorAB = pointB-pointA
-                vectorAM = pointM-pointA
-                vectorBC = pointC-pointB
-                vectorBM = pointM-pointB
-                # 0 <= dot(AB,AM) <= dot(AB,AB) && 0 <= dot(BC,BM) <= dot(BC,BC)
-                if (np.dot(vectorAB,vectorAM) >= 0 and np.dot(vectorAB,vectorAB) >= np.dot(vectorAB,vectorAM)) and (np.dot(vectorBC,vectorBM) >= 0 and np.dot(vectorBC,vectorBC) >= np.dot(vectorBC,vectorBM)):
+                x_min = min(self.seabed_corners[:,0])
+                y_min = min(self.seabed_corners[:,1])
+                x_max = max(self.seabed_corners[:,0])
+                y_max = max(self.seabed_corners[:,1])
+                if ((point[0] > x_min and point[0] < x_max) and (point[1] > y_min and point[1] < y_max)):
                     # Point lies in rectangle
                     # Check height difference, we say upwards is the z-axes
                     vec_up = np.array([0,0,1])
@@ -223,7 +215,7 @@ class PCD:
         tree = KDTree(points, leaf_size=2)
         if n_neighbors is None:
             #all_nn_indices = tree.query_radius(points, r=0.5)  # NNs within distance r of point
-            all_nn_indices = tree.query_radius(points, r=0.5)  # NNs within distance r of point
+            all_nn_indices = tree.query_radius(points, r=1)  # NNs within distance r of point
             ind = 0
             for point in all_nn_indices:
                 for neighbour in point:
