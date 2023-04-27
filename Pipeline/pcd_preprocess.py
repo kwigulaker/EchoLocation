@@ -22,7 +22,8 @@ class PCD:
     # clusters --> labels for each point as to which cluster/object they belong.
 
     def __init__(self, filename):
-        pcd = o3d.io.read_point_cloud(filename) # Pointcloud read from .xyz file
+        pcd = o3d.io.read_point_cloud(filename) # Pointcloud read from .xyz files
+        self.pcd = pcd
         self.outliers = np.asarray(pcd.points)
         self.graph_outliers = None
     

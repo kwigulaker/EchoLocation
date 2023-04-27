@@ -15,6 +15,7 @@
 import os
 import sys
 import networkx as nx
+import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
 from math import ceil
@@ -41,22 +42,46 @@ from torch_geometric.data import Dataset, Data
 
 graphs = []
 labels = []
+max_nodes = 7000
+train = False
+
+print("Cuda available: ", torch.cuda.is_available())
+print("Device name:", torch.cuda.get_device_name())
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 def processData(directory,class_num):
+    files = os.listdir(directory)
     # Load dataset in
-    for cluster_file in os.listdir(directory):
+    for cluster_file in files:
         new_pcd = PCD(directory + "/" + str(cluster_file))
+        if(new_pcd.outliers.shape[0] > max_nodes):
+            print("PCD over max node size, downsampling...")
+            new_pcd.outliers = downSampleRandom(new_pcd.outliers,max_nodes)
         new_pcd.generateGraphNN()
         graphs.append(new_pcd.graph_outliers)
         labels.append(class_num)
+
+def downSampleRandom(pcd,threshold):
+    indices = np.random.choice(pcd.shape[0], threshold, replace=False)
+    downsampled_pcd = pcd[indices, :]
+    return downsampled_pcd
+
+def downSampleVoxel(pcd):
+    num_points = np.asarray(pcd.points).shape[0]
+    voxel_size = (max_nodes / num_points)
+    downsampled_pcd = pcd.voxel_down_sample(voxel_size)
+
+    return np.asarray(downsampled_pcd.points)
 
 class GCN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels):
         super(GCN, self).__init__()
         self.conv1 = GCNConv(in_channels, hidden_channels)
-        self.conv2 = GCNConv(hidden_channels, out_channels)
+        self.conv2 = GCNConv(hidden_channels, 32)
+        self.lin = torch.nn.Linear(32, out_channels)
 
     def forward(self, data):
-        x, edge_index, batch = data[0].x, data[0].edge_index, data[0].batch
+        x, edge_index, batch = data.x, data.edge_index, data.batch
         x = F.relu(self.conv1(x, edge_index))
         x = self.conv2(x, edge_index)
         x = global_mean_pool(x, batch)
@@ -66,7 +91,7 @@ class GraphClassificationDataset(Dataset):
     def __init__(self, graphs: List[nx.Graph], labels: List[int]):
         super(GraphClassificationDataset, self).__init__()
         for graph in graphs:
-            node_dict = {i: (0,0,0) for i in range(graph.number_of_nodes(),40000)} # Padding to create a uniform graph size
+            node_dict = {i: (0,0,0) for i in range(graph.number_of_nodes(),max_nodes)} # Padding to create a uniform graph size
             graph.add_nodes_from(node_dict)
         self.graphs = graphs
         self.labels = labels
@@ -89,36 +114,56 @@ processData("../EM2040/data/clusters/unknown_xyz",1)
 processData("../EM2040/data/clusters/moorings_xyz",2)
 processData("../EM2040/data/clusters/shipwrecks_xyz",3)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
 # Create a PyTorch dataset and dataloader
 dataset = GraphClassificationDataset(graphs, labels)
 dataloader = DataListLoader(dataset, batch_size=1,shuffle=True)
 
 # Initialize the model and optimizer
-model = GCN(in_channels=40000, hidden_channels=2000, out_channels=4)
+model = GCN(in_channels=max_nodes, hidden_channels=1000, out_channels=4)
 model.to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+torch.cuda.empty_cache()
 
-# Train the model
-model.train()
-for epoch in range(100):
-    epoch_loss = 0.0
-    for data in dataloader:
-        optimizer.zero_grad()
-        out = model(data)
-        loss = F.nll_loss(out, data[0].y)
-        loss.backward()
-        optimizer.step()
-        epoch_loss += loss.item()
-    epoch_loss /= len(dataset)
-    print(f"Epoch {epoch}, Loss: {epoch_loss:.4f}")
+if(train):
+    # Train the model
+    model.train()
+    best_acc = 0.0
 
+    for epoch in range(300):
+        epoch_loss = 0.0
+        epoch_acc = 0.0
+        for data in dataloader:
+            data = data[0].to(device)
+            optimizer.zero_grad()
+            out = model(data)
+            loss = F.nll_loss(out, data.y)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+            epoch_acc += (out.argmax(dim=1) == data.y).sum().item()
+
+        epoch_loss /= len(dataset)
+        epoch_acc /= len(dataset)
+        print(f"Epoch {epoch}, loss: {epoch_loss:.4f}, accuracy: {epoch_acc:.4f}")
+        if epoch_acc > best_acc:
+            best_acc = epoch_acc
+            torch.save(model.state_dict(), "best_v2.pt")
 # Test the model
+model.load_state_dict(torch.load('best.pt'))
 model.eval()
 with torch.no_grad():
+    num_items = 0
+    num_corr = 0
+    num_wrong = 0
     for data in dataloader:
+        num_items+=1
+        data = data[0].to(device)
         out = model(data)
         pred = out.argmax(dim=1)
-        print('Prediction:', pred)
+        #print('Prediction:' +  str(pred) + ", Real: " + str(data.y))
+        if(pred == data.y):
+            num_corr+=1
+        else:
+            num_wrong+=1
+    print('Number of clouds:' +  str(num_items) + ", Correct predictions: " + str(num_corr) + ", Wrong predictions: " + str(num_wrong))
+
