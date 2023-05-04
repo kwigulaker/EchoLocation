@@ -26,11 +26,10 @@ class PCD:
         self.outliers = np.asarray(pcd.points)
         self.graph_outliers = None
     
-    def find_seabed_ransac(self,remove_neg):
+    def find_seabed_ransac(self,remove_neg,inlier_threshold,seabed_threshold):
         # What if this just runs indefinitely, until seabeds with less than say 5000 points arent found?
         num_failures = 0
         i = 0
-        inlier_threshold = 0.2
         while num_failures < 3:
             print("Iteration: " + str(i+1))
             seabed = pyrsc.Plane()
@@ -41,7 +40,7 @@ class PCD:
             self.seabed_corners = seabed_corners
             seabed_points = []
             # This should be a dynamic variable and not hardcoded
-            if np.array(best_inliers).shape[0] < 7000:
+            if np.array(best_inliers).shape[0] < seabed_threshold:
                 num_failures += 1
                 continue
             for index in best_inliers:
@@ -206,8 +205,7 @@ class PCD:
         print("Number of vertices: " + str(len(self.graph_outliers)))
         print("Number of edges generated: " + str(np.array(self.graph_outliers.edges).shape))
 
-    def generateGraphNN(self,n_neighbors=None):
-        print("Generating graph with Nearest Neighbours approach...")
+    def generateGraphNN(self,n_neighbors=None,neighbor_radius=None):
         points = self.outliers
         node_dict = {i: (self.outliers[i,0],self.outliers[i,1],self.outliers[i,2]) for i in range(len(self.outliers[:,0]))} # Hashable array of positions for each point
         self.graph_outliers = nx.Graph()
@@ -215,7 +213,7 @@ class PCD:
         tree = KDTree(points, leaf_size=2)
         if n_neighbors is None:
             #all_nn_indices = tree.query_radius(points, r=0.5)  # NNs within distance r of point
-            all_nn_indices = tree.query_radius(points, r=1)  # NNs within distance r of point
+            all_nn_indices = tree.query_radius(points, r=neighbor_radius)  # NNs within distance r of point
             ind = 0
             for point in all_nn_indices:
                 for neighbour in point:
@@ -232,8 +230,6 @@ class PCD:
                     for neighbour in point:
                         self.graph_outliers.add_edge(ind,neighbour)
                     ind += 1
-        print("Number of vertices: " + str(len(self.graph_outliers)))
-        print("Number of edges generated: " + str(np.array(self.graph_outliers.edges).shape))
 
     
     def plot2D(self,edges,clustering):
@@ -287,12 +283,12 @@ class PCD:
             for sub in subgraphs:
                 print(np.array(sub).shape)
                 if(len(sub) > 60):
-                    np.savetxt(location + "_" + str(indice) + ".txt",sub)
+                    np.savetxt(location + "_" + str(indice) + ".xyz",sub)
                 else:
                     for point in sub:
                         noise.append(point)
                 indice += 1
-            np.savetxt(location + "_noise.txt",noise)
+            np.savetxt(location + "_noise.xyz",noise)
 
         else:
             subgraphs = [self.graph_outliers.subgraph(c).copy() for c in nx.connected_components(self.graph_outliers)] # Note, these are arrays of indices not actual points
@@ -308,13 +304,13 @@ class PCD:
                     for indice in indices:
                         points[curr_indice] = [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]]
                         curr_indice += 1
-                    np.savetxt(location + "_" + str(ind_sub) + ".txt",points)
+                    np.savetxt(location + "_" + str(ind_sub) + ".xyz",points)
 
                 else:
                     for indice in indices:
                         noise.append( [self.outliers[indice][0],self.outliers[indice][1],self.outliers[indice][2]])
                 ind_sub+=1
-            np.savetxt(location + "_noise.txt",noise)
+            np.savetxt(location + "_noise.xyz",noise)
 
 
 

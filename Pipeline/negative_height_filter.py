@@ -26,7 +26,6 @@ def negativeHeightFilter(point,plane,equation):
             # Point lies in rectangle
             # Check height difference between nearest
             perp_point = getPointPerpendicular(point,equation)
-            #ax.scatter(perp_point[0],perp_point[1],perp_point[2],c='blue')
             # We say that 'up' is towards the z-axis in a positive direction.
             vec_up = np.array([0,0,1])
             diff_vec = point - perp_point
@@ -96,10 +95,13 @@ def testNegativeHeightFilter():
         y_corners = corners[:,1]
         z_corners = corners[:,2]
 
-        ax.plot_surface(xx, yy, zz, alpha=0.5)
+        surf = ax.plot_surface(xx, yy, zz, alpha=0.5)
+        surf._facecolors2d  = surf._facecolor3d
+        surf._edgecolors2d  = surf._edgecolor3d
         ax.scatter(x_other,y_other,z_other,c='red',s=1)
         ax.scatter(x_filtered,y_filtered,z_filtered,c='blue',s=1)
         ax.scatter(x_corners,y_corners,z_corners,c='green',s=1)
+        #tikzplotlib.save("NSF.tex")
         plt.show()
 
 if __name__ == "__main__":

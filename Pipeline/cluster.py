@@ -40,11 +40,8 @@ def getConnectedComponents(pcd):
 if __name__ == "__main__":
     test_pcd = PCD("../EM2040/data/source/xyz/unknown_objects/0016_20210607_135027.utm.xyz.xyz")
     test_pcd.find_seabed_ransac(True) # Seabed filtering
-    #test_pcd.generateGraphDelaunay() # Graph representation
     test_pcd.generateGraphNN()
-    #clusterDBScan(test_pcd)
     getConnectedComponents(test_pcd) # Clustering
     test_pcd.plot2D(False,True) # Plotting
     np.savetxt("../EM2040/data/seabed/0016_20210607_135027_inliers.txt",test_pcd.seabed) # Save seabed inliers
-    #np.savetxt("../EM2040/data/xyz/seeps/arne/0003_20220708_113138_Shipname_outliers.txt",test_pcd.outliers) # Save seabed outliers
     test_pcd.writeToClusters("../EM2040/data/clusters/all/0016_20210607_135027/0016_20210607_135027") # Save outliers as multiple clustered pointclouds

@@ -44,9 +44,10 @@ graphs = []
 labels = []
 max_nodes = 7000
 train = False
+test = False
 
-print("Cuda available: ", torch.cuda.is_available())
-print("Device name:", torch.cuda.get_device_name())
+#print("Cuda available: ", torch.cuda.is_available())
+#print("Device name:", torch.cuda.get_device_name())
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def processData(directory,class_num):
@@ -57,7 +58,7 @@ def processData(directory,class_num):
         if(new_pcd.outliers.shape[0] > max_nodes):
             print("PCD over max node size, downsampling...")
             new_pcd.outliers = downSampleRandom(new_pcd.outliers,max_nodes)
-        new_pcd.generateGraphNN()
+        new_pcd.generateGraphNN(neighbor_radius=0.5)
         graphs.append(new_pcd.graph_outliers)
         labels.append(class_num)
 
@@ -109,61 +110,92 @@ class GraphClassificationDataset(Dataset):
         return data
 
 
-processData("../EM2040/data/clusters/terrain_xyz",0)
-processData("../EM2040/data/clusters/unknown_xyz",1)
-processData("../EM2040/data/clusters/moorings_xyz",2)
-processData("../EM2040/data/clusters/shipwrecks_xyz",3)
+def predictOnFiles(dir,model_dir):
+    files = os.listdir(dir)
+    graphs = []
+    pred_labels = []
+    model = GCN(in_channels=max_nodes, hidden_channels=1000, out_channels=4)
+    model.load_state_dict(torch.load(model_dir,map_location=torch.device('cpu')))
 
-# Create a PyTorch dataset and dataloader
-dataset = GraphClassificationDataset(graphs, labels)
-dataloader = DataListLoader(dataset, batch_size=1,shuffle=True)
+    for cluster_file in files:
+        new_pcd = PCD(dir + "/" + str(cluster_file))
+        if(new_pcd.outliers.shape[0] > max_nodes):
+            print("PCD over max node size, downsampling...")
+            new_pcd.outliers = downSampleRandom(new_pcd.outliers,max_nodes)
+        new_pcd.generateGraphNN(neighbor_radius=0.5)
+        graph = new_pcd.graph_outliers
+        node_dict = {i: (0,0,0) for i in range(graph.number_of_nodes(),max_nodes)} # Padding to create a uniform graph size
+        graph.add_nodes_from(node_dict)
+        graphs.append(graph)
 
-# Initialize the model and optimizer
-model = GCN(in_channels=max_nodes, hidden_channels=1000, out_channels=4)
-model.to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-torch.cuda.empty_cache()
-
-if(train):
-    # Train the model
-    model.train()
-    best_acc = 0.0
-
-    for epoch in range(300):
-        epoch_loss = 0.0
-        epoch_acc = 0.0
-        for data in dataloader:
-            data = data[0].to(device)
-            optimizer.zero_grad()
-            out = model(data)
-            loss = F.nll_loss(out, data.y)
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-            epoch_acc += (out.argmax(dim=1) == data.y).sum().item()
-
-        epoch_loss /= len(dataset)
-        epoch_acc /= len(dataset)
-        print(f"Epoch {epoch}, loss: {epoch_loss:.4f}, accuracy: {epoch_acc:.4f}")
-        if epoch_acc > best_acc:
-            best_acc = epoch_acc
-            torch.save(model.state_dict(), "best_v2.pt")
-# Test the model
-model.load_state_dict(torch.load('best.pt'))
-model.eval()
-with torch.no_grad():
-    num_items = 0
-    num_corr = 0
-    num_wrong = 0
-    for data in dataloader:
-        num_items+=1
-        data = data[0].to(device)
+    for graph in graphs:
+        edge_index = torch.tensor(list(graph.edges)).t().contiguous()
+        x = torch.tensor(to_numpy_matrix(graph), dtype=torch.float)
+        data = Data(x=x, edge_index=edge_index)
         out = model(data)
         pred = out.argmax(dim=1)
-        #print('Prediction:' +  str(pred) + ", Real: " + str(data.y))
-        if(pred == data.y):
-            num_corr+=1
-        else:
-            num_wrong+=1
-    print('Number of clouds:' +  str(num_items) + ", Correct predictions: " + str(num_corr) + ", Wrong predictions: " + str(num_wrong))
+        pred_labels.append(pred.item())
+    
+    ind = 0
+    for label in pred_labels:
+        np.savetxt(dir + "/" + str(files[ind]) + "_label.txt", np.asarray([label]))
+        ind+=1
+if(test):
+    processData("../EM2040/data/clusters/terrain_xyz",0)
+    processData("../EM2040/data/clusters/unknown_xyz",1)
+    processData("../EM2040/data/clusters/moorings_xyz",2)
+    processData("../EM2040/data/clusters/shipwrecks_xyz",3)
+
+    # Create a PyTorch dataset and dataloader
+    dataset = GraphClassificationDataset(graphs, labels)
+    dataloader = DataListLoader(dataset, batch_size=1,shuffle=True)
+
+    # Initialize the model and optimizer
+    model = GCN(in_channels=max_nodes, hidden_channels=1000, out_channels=4)
+    model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    torch.cuda.empty_cache()
+
+    if(train):
+        # Train the model
+        model.train()
+        best_acc = 0.0
+
+        for epoch in range(300):
+            epoch_loss = 0.0
+            epoch_acc = 0.0
+            for data in dataloader:
+                data = data[0].to(device)
+                optimizer.zero_grad()
+                out = model(data)
+                loss = F.nll_loss(out, data.y)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+                epoch_acc += (out.argmax(dim=1) == data.y).sum().item()
+
+            epoch_loss /= len(dataset)
+            epoch_acc /= len(dataset)
+            print(f"Epoch {epoch}, loss: {epoch_loss:.4f}, accuracy: {epoch_acc:.4f}")
+            if epoch_acc > best_acc:
+                best_acc = epoch_acc
+                torch.save(model.state_dict(), "best_v2.pt")
+    # Test the model
+    model.load_state_dict(torch.load('best.pt',map_location=torch.device('cpu')))
+    model.eval()
+    with torch.no_grad():
+        num_items = 0
+        num_corr = 0
+        num_wrong = 0
+        for data in dataloader:
+            num_items+=1
+            data = data[0].to(device)
+            out = model(data)
+            pred = out.argmax(dim=1)
+            #print('Prediction:' +  str(pred) + ", Real: " + str(data.y))
+            if(pred == data.y):
+                num_corr+=1
+            else:
+                num_wrong+=1
+        print('Number of clouds:' +  str(num_items) + ", Correct predictions: " + str(num_corr) + ", Wrong predictions: " + str(num_wrong))
 
