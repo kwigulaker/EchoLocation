@@ -39,12 +39,14 @@ from torch_geometric.data import DataLoader
 from networkx import to_numpy_matrix
 from typing import List
 from torch_geometric.data import Dataset, Data
+from sklearn.metrics import ConfusionMatrixDisplay
 
 graphs = []
 labels = []
+preds = []
 max_nodes = 7000
 train = False
-test = False
+test = True
 
 #print("Cuda available: ", torch.cuda.is_available())
 #print("Device name:", torch.cuda.get_device_name())
@@ -68,7 +70,7 @@ def downSampleRandom(pcd,threshold):
     return downsampled_pcd
 
 def downSampleVoxel(pcd):
-    num_points = np.asarray(pcd.points).shape[0]
+    num_points = np.asarray(pcd).shape[0]
     voxel_size = (max_nodes / num_points)
     downsampled_pcd = pcd.voxel_down_sample(voxel_size)
 
@@ -118,15 +120,16 @@ def predictOnFiles(dir,model_dir):
     model.load_state_dict(torch.load(model_dir,map_location=torch.device('cpu')))
 
     for cluster_file in files:
-        new_pcd = PCD(dir + "/" + str(cluster_file))
-        if(new_pcd.outliers.shape[0] > max_nodes):
-            print("PCD over max node size, downsampling...")
-            new_pcd.outliers = downSampleRandom(new_pcd.outliers,max_nodes)
-        new_pcd.generateGraphNN(neighbor_radius=0.5)
-        graph = new_pcd.graph_outliers
-        node_dict = {i: (0,0,0) for i in range(graph.number_of_nodes(),max_nodes)} # Padding to create a uniform graph size
-        graph.add_nodes_from(node_dict)
-        graphs.append(graph)
+        if(cluster_file.endswith(".xyz")):
+            new_pcd = PCD(dir + "/" + str(cluster_file))
+            if(new_pcd.outliers.shape[0] > max_nodes):
+                print("PCD over max node size, downsampling...")
+                new_pcd.outliers = downSampleRandom(new_pcd.outliers,max_nodes)
+            new_pcd.generateGraphNN(neighbor_radius=0.5)
+            graph = new_pcd.graph_outliers
+            node_dict = {i: (0,0,0) for i in range(graph.number_of_nodes(),max_nodes)} # Padding to create a uniform graph size
+            graph.add_nodes_from(node_dict)
+            graphs.append(graph)
 
     for graph in graphs:
         edge_index = torch.tensor(list(graph.edges)).t().contiguous()
@@ -141,10 +144,10 @@ def predictOnFiles(dir,model_dir):
         np.savetxt(dir + "/" + str(files[ind]) + "_label.txt", np.asarray([label]))
         ind+=1
 if(test):
-    processData("../EM2040/data/clusters/terrain_xyz",0)
-    processData("../EM2040/data/clusters/unknown_xyz",1)
-    processData("../EM2040/data/clusters/moorings_xyz",2)
-    processData("../EM2040/data/clusters/shipwrecks_xyz",3)
+    processData("../EM2040/data/clusters/terrain_test",0)
+    processData("../EM2040/data/clusters/unknown_test",1)
+    processData("../EM2040/data/clusters/moorings_test",2)
+    processData("../EM2040/data/clusters/shipwrecks_test",3)
 
     # Create a PyTorch dataset and dataloader
     dataset = GraphClassificationDataset(graphs, labels)
@@ -181,7 +184,7 @@ if(test):
                 best_acc = epoch_acc
                 torch.save(model.state_dict(), "best_v2.pt")
     # Test the model
-    model.load_state_dict(torch.load('best.pt',map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load('best_v2.pt',map_location=torch.device('cpu')))
     model.eval()
     with torch.no_grad():
         num_items = 0
@@ -197,5 +200,10 @@ if(test):
                 num_corr+=1
             else:
                 num_wrong+=1
+            preds.append(pred.item())
         print('Number of clouds:' +  str(num_items) + ", Correct predictions: " + str(num_corr) + ", Wrong predictions: " + str(num_wrong))
+labels = [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3]
+preds =  [0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,2,2,2,2,2,2,0,0,0,0,3,3,3,3,3]
+ConfusionMatrixDisplay.from_predictions(labels,preds)
+plt.show()
 

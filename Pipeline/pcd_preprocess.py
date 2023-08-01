@@ -2,6 +2,7 @@ import numpy as np
 import open3d as o3d
 from sklearn.neighbors import KDTree
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import minmax_scale
 from scipy.spatial import Delaunay
 from pyRANSAC import pyransac3d as pyrsc
 from tqdm import tqdm
@@ -10,6 +11,8 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import networkx as nx
 import pyproj as pyproj
+from mayavi.mlab import *
+
 
 ## Class containing a pointcloud, including all necessary preprocessing functions and representations
 class PCD:
@@ -23,19 +26,27 @@ class PCD:
 
     def __init__(self, filename):
         pcd = o3d.io.read_point_cloud(filename) # Pointcloud read from .xyz file
-        self.outliers = np.asarray(pcd.points)
+        ds = self.downSampleVoxel(pcd,0.5)
+        self.outliers = np.asarray(ds)
         self.graph_outliers = None
     
+    def downSampleRandom(self,pcd,threshold):
+        indices = np.random.choice(pcd.shape[0], threshold, replace=False)
+        downsampled_pcd = pcd[indices, :]
+        return downsampled_pcd
+
+    def downSampleVoxel(self,pcd,voxel_size):
+        downsampled_pcd = pcd.voxel_down_sample(voxel_size)
+        return np.asarray(downsampled_pcd.points)
+    
     def find_seabed_ransac(self,remove_neg,inlier_threshold,seabed_threshold):
-        # What if this just runs indefinitely, until seabeds with less than say 5000 points arent found?
         num_failures = 0
         i = 0
         while num_failures < 3:
-            print("Iteration: " + str(i+1))
             seabed = pyrsc.Plane()
             points_np = self.outliers
             print("Current amount of outliers: " + str(points_np.shape))
-            best_eq, best_inliers,seabed_corners = seabed.fit((self.outliers),inlier_threshold,maxIteration=5000)
+            best_eq, best_inliers,seabed_corners = seabed.fit((self.outliers),inlier_threshold,maxIteration=3000)
             self.equation = best_eq
             self.seabed_corners = seabed_corners
             seabed_points = []
@@ -52,6 +63,7 @@ class PCD:
             print("Total points in seabed: " + str(self.seabed.shape))
             self.filter_seabed(remove_neg)
             i+=1
+        print("Iterations: " + str(i))
     
     def filter_seabed(self,remove_neg):
         # This step can become computationally complex when other methods are used, so far this is the quickest filtering method I could find
@@ -230,7 +242,8 @@ class PCD:
                     for neighbour in point:
                         self.graph_outliers.add_edge(ind,neighbour)
                     ind += 1
-
+        print("Number of vertices: " + str(len(self.graph_outliers)))
+        print("Number of edges generated: " + str(np.array(self.graph_outliers.edges).shape))
     
     def plot2D(self,edges,clustering):
         # We plot the horizontal plane to judge clustering and edge generation success
@@ -242,7 +255,7 @@ class PCD:
                 point2 = self.outliers[end]
                 x_values = [point1[0], point2[0]]
                 y_values = [point1[1], point2[1]]
-                plt.plot(x_values, y_values, 'bo', linestyle="--", linewidth=0.1)
+                plt.plot(x_values, y_values, linewidth=0.1)
         x = self.outliers[:,0]
         y = self.outliers[:,1]
         if clustering:
@@ -261,11 +274,13 @@ class PCD:
             plt.colorbar()
             plt.show()
         else:
-            plt.scatter(x,y,alpha=0.5,s=0.01)
+            z = -self.outliers[:,2]
+            plt.scatter(x,y,alpha=1,s=0.1, c=z,cmap='gray')
             plt.show()
 
+
     ## Write pointcloud as multiple individual pointclouds representing each cluster
-    def writeToClusters(self,location):
+    def writeToClusters(self,location,threshold):
         # location: directory/name to write clusters to
         if self.graph_outliers is None:
             # Clusters generated through non-graph representation.
@@ -282,7 +297,7 @@ class PCD:
             indice = 0
             for sub in subgraphs:
                 print(np.array(sub).shape)
-                if(len(sub) > 60):
+                if(len(sub) > threshold):
                     np.savetxt(location + "_" + str(indice) + ".xyz",sub)
                 else:
                     for point in sub:

@@ -19,8 +19,8 @@ def clusterDBScan(pcd):
 
 
 def clusterHDBScan(pcd):
-    clusterer = hdbscan.HDBSCAN(min_cluster_size=10)
-    pcd.clusters = np.array([clusterer.fit_predict(pcd.outliers)])
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=50)
+    pcd.clusters = np.array(clusterer.fit_predict(pcd.outliers))
 
 
 def getConnectedComponents(pcd):

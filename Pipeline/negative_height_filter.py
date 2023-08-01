@@ -1,5 +1,24 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+
+def downSampleRandom(pcd,threshold):
+    indices = np.random.choice(pcd.shape[0], threshold, replace=False)
+    downsampled_pcd = pcd[indices, :]
+    return downsampled_pcd
+
+def downSampleVoxel(pcd,voxel_size):
+    num_points = np.asarray(pcd).shape[0]
+    downsampled_pcd = pcd.voxel_down_sample(voxel_size)
+
+    return np.asarray(downsampled_pcd.points)
+
+#def testDownsampling():
+
+
+
+
 
 def getPointPerpendicular(point,plane):
         # point = [x,y,z]
@@ -105,6 +124,7 @@ def testNegativeHeightFilter():
         plt.show()
 
 if __name__ == "__main__":
+    testDownsampling()
     testNegativeHeightFilter()
 
 
